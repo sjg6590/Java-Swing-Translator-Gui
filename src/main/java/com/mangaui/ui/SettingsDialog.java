@@ -3,6 +3,7 @@ package com.mangaui.ui;
 import com.mangaui.app.SettingsManager;
 
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -16,10 +17,11 @@ import java.awt.Font;
 public class SettingsDialog extends JDialog {
     private final JTextField pythonField;
     private final JTextField deeplApiKeyField;
+    private final JComboBox<String> languageComboBox;
 
     public SettingsDialog(Frame owner) {
         super(owner, "Settings", true);
-        setSize(600, 200);
+        setSize(600, 250);
         setLocationRelativeTo(owner);
         
         // Set dialog background
@@ -63,13 +65,33 @@ public class SettingsDialog extends JDialog {
         ));
         form.add(deeplApiKeyField);
 
+        JLabel languageLabel = new JLabel("OCR Language:");
+        languageLabel.setForeground(ColorTheme.TEXT_PRIMARY);
+        languageLabel.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        form.add(languageLabel);
+        
+        String[] languages = {"Japanese (manga-ocr)", "Portuguese (Tesseract)", "English (Tesseract)", "Spanish (Tesseract)", "French (Tesseract)", "German (Tesseract)"};
+        String savedLanguage = saved.getProperty("OCR_LANGUAGE", "Japanese (manga-ocr)");
+        languageComboBox = new JComboBox<>(languages);
+        languageComboBox.setSelectedItem(savedLanguage);
+        languageComboBox.setBackground(ColorTheme.BACKGROUND_CARD);
+        languageComboBox.setForeground(ColorTheme.TEXT_PRIMARY);
+        languageComboBox.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        languageComboBox.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+            javax.swing.BorderFactory.createLineBorder(ColorTheme.BORDER_LIGHT, 1),
+            javax.swing.BorderFactory.createEmptyBorder(6, 8, 6, 8)
+        ));
+        form.add(languageComboBox);
+
         JButton save = createStyledButton("Save");
         save.addActionListener(e -> {
             String py = pythonField.getText().trim();
             String key = deeplApiKeyField.getText().trim();
+            String language = (String) languageComboBox.getSelectedItem();
             System.setProperty("PYTHON_CMD", py);
             System.setProperty("DEEPL_API_KEY", key);
-            SettingsManager.save(py, key);
+            System.setProperty("OCR_LANGUAGE", language);
+            SettingsManager.save(py, key, language);
             setVisible(false);
         });
 

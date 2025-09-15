@@ -21,10 +21,11 @@ public class SettingsManager {
         return props;
     }
 
-    public static void save(String pythonCmd, String deeplApiKey) {
+    public static void save(String pythonCmd, String deeplApiKey, String ocrLanguage) {
         Properties props = load();
         if (pythonCmd != null) props.setProperty("PYTHON_CMD", pythonCmd);
         if (deeplApiKey != null) props.setProperty("DEEPL_API_KEY", deeplApiKey);
+        if (ocrLanguage != null) props.setProperty("OCR_LANGUAGE", ocrLanguage);
         File dir = new File(APP_DIR);
         if (!dir.exists()) {
             // noinspection ResultOfMethodCallIgnored
@@ -44,6 +45,10 @@ public class SettingsManager {
         String deepl = props.getProperty("DEEPL_API_KEY", "");
         if (!deepl.isBlank()) {
             System.setProperty("DEEPL_API_KEY", deepl);
+        }
+        String ocrLang = props.getProperty("OCR_LANGUAGE", "");
+        if (!ocrLang.isBlank()) {
+            System.setProperty("OCR_LANGUAGE", ocrLang);
         }
     }
 }

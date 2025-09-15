@@ -73,27 +73,57 @@ public class MangaOcrService {
     private String extractOcrText(String raw) {
         if (raw == null) return "";
         String[] lines = raw.split("\r?\n");
-        String last = "";
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.isEmpty()) continue;
-            // Skip obvious logs/progress
-            if (trimmed.startsWith("[") && trimmed.contains("]") && trimmed.toLowerCase().contains("bubble")) continue;
-            if (trimmed.matches("\\d{4}-\\d{2}-\\d{2}.*INFO.*")) continue;
-            if (trimmed.contains("Fetching") && trimmed.contains("files")) continue;
-            if (trimmed.contains("it/s")) continue;
-            last = trimmed; // keep last meaningful line
-        }
-        if (last.isEmpty()) {
-            // Fallback to absolute last non-empty line even if it matches patterns
-            for (int i = lines.length - 1; i >= 0; i--) {
-                if (!lines[i].trim().isEmpty()) return lines[i].trim();
+        
+        // Check if this is Tesseract output (clean text) or manga-ocr output (with logs)
+        boolean isTesseractOutput = !raw.contains("[") && !raw.contains("INFO") && !raw.contains("Fetching");
+        
+        if (isTesseractOutput) {
+            // For Tesseract: concatenate all non-empty lines
+            StringBuilder result = new StringBuilder();
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (!trimmed.isEmpty()) {
+                    if (result.length() > 0) {
+                        result.append(" ");
+                    }
+                    result.append(trimmed);
+                }
             }
+            return result.toString();
+        } else {
+            // For manga-ocr: filter out log messages and keep last meaningful line
+            String last = "";
+            for (String line : lines) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty()) continue;
+                // Skip obvious logs/progress
+                if (trimmed.startsWith("[") && trimmed.contains("]") && trimmed.toLowerCase().contains("bubble")) continue;
+                if (trimmed.matches("\\d{4}-\\d{2}-\\d{2}.*INFO.*")) continue;
+                if (trimmed.contains("Fetching") && trimmed.contains("files")) continue;
+                if (trimmed.contains("it/s")) continue;
+                last = trimmed; // keep last meaningful line
+            }
+            if (last.isEmpty()) {
+                // Fallback to absolute last non-empty line even if it matches patterns
+                for (int i = lines.length - 1; i >= 0; i--) {
+                    if (!lines[i].trim().isEmpty()) return lines[i].trim();
+                }
+            }
+            return last;
         }
-        return last;
     }
 
     private String runMangaOcr(String imagePath) throws Exception {
+        String language = System.getProperty("OCR_LANGUAGE", "Japanese (manga-ocr)");
+        
+        if (language.equals("Japanese (manga-ocr)")) {
+            return runMangaOcrJapanese(imagePath);
+        } else {
+            return runTesseractOcr(imagePath, language);
+        }
+    }
+    
+    private String runMangaOcrJapanese(String imagePath) throws Exception {
         String pythonCmd = resolvePythonCommand();
         List<String> command = new ArrayList<>();
         command.add(pythonCmd);
@@ -116,6 +146,67 @@ public class MangaOcrService {
             }
             return sb.toString().trim();
         }
+    }
+    
+    private String runTesseractOcr(String imagePath, String language) throws Exception {
+        String tesseractCmd = resolveTesseractCommand();
+        String langCode = getTesseractLanguageCode(language);
+        
+        List<String> command = new ArrayList<>();
+        command.add(tesseractCmd);
+        command.add(imagePath);
+        command.add("stdout");
+        command.add("-l");
+        command.add(langCode);
+        command.add("--psm");
+        command.add("6"); // Assume uniform block of text
+
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append('\n');
+            }
+            int code = process.waitFor();
+            if (code != 0) {
+                throw new RuntimeException("tesseract exited with code " + code + ":\n" + sb);
+            }
+            return sb.toString().trim();
+        }
+    }
+    
+    private String getTesseractLanguageCode(String language) {
+        switch (language) {
+            case "Portuguese (Tesseract)": return "por";
+            case "English (Tesseract)": return "eng";
+            case "Spanish (Tesseract)": return "spa";
+            case "French (Tesseract)": return "fra";
+            case "German (Tesseract)": return "deu";
+            default: return "eng";
+        }
+    }
+    
+    private String resolveTesseractCommand() {
+        String configured = System.getProperty("TESSERACT_CMD", System.getenv().getOrDefault("TESSERACT_CMD", ""));
+        if (configured != null && !configured.isBlank()) {
+            return configured;
+        }
+        // Try common tesseract command names
+        String[] candidates = new String[] {"tesseract", "tesseract-ocr"};
+        for (String c : candidates) {
+            try {
+                ProcessBuilder pb = new ProcessBuilder(c, "--version");
+                Process process = pb.start();
+                int code = process.waitFor();
+                if (code == 0) {
+                    return c;
+                }
+            } catch (Exception ignored) {}
+        }
+        return "tesseract"; // fallback
     }
 
     private String resolvePythonCommand() {
